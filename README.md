@@ -1,87 +1,71 @@
-# Welcome to React Router!
+# Cashiverse
 
-A modern, production-ready template for building full-stack React applications using React Router.
+A modern shift clocking and time tracking platform built with React and Firebase.
 
-[![Open in StackBlitz](https://developer.stackblitz.com/img/open_in_stackblitz.svg)](https://stackblitz.com/github/remix-run/react-router-templates/tree/main/default)
-
-## Features
-
-- 🚀 Server-side rendering
-- ⚡️ Hot Module Replacement (HMR)
-- 📦 Asset bundling and optimization
-- 🔄 Data loading and mutations
-- 🔒 TypeScript by default
-- 🎉 TailwindCSS for styling
-- 📖 [React Router docs](https://reactrouter.com/)
-
-## Getting Started
-
-### Installation
-
-Install the dependencies:
-
-```bash
-npm install
-```
-
-### Development
-
-Start the development server with HMR:
-
-```bash
-npm run dev
-```
-
-Your application will be available at `http://localhost:5173`.
-
-## Building for Production
-
-Create a production build:
-
-```bash
-npm run build
-```
-
-## Deployment
-
-### Docker Deployment
-
-To build and run using Docker:
-
-```bash
-docker build -t my-app .
-
-# Run the container
-docker run -p 3000:3000 my-app
-```
-
-The containerized application can be deployed to any platform that supports Docker, including:
-
-- AWS ECS
-- Google Cloud Run
-- Azure Container Apps
-- Digital Ocean App Platform
-- Fly.io
-- Railway
-
-### DIY Deployment
-
-If you're familiar with deploying Node applications, the built-in app server is production-ready.
-
-Make sure to deploy the output of `npm run build`
-
-```
-├── package.json
-├── package-lock.json (or pnpm-lock.yaml, or bun.lockb)
-├── build/
-│   ├── client/    # Static assets
-│   └── server/    # Server-side code
-```
-
-## Styling
-
-This template comes with [Tailwind CSS](https://tailwindcss.com/) already configured for a simple default starting experience. You can use whatever CSS framework you prefer.
+Cashiverse is a web-based shift clock-in service designed to help employees track work hours and allow employers to monitor attendance in real time. The platform provides secure authentication, cloud-based time logging, and a responsive dashboard for managing shifts.
 
 ---
 
-Built with ❤️ using React Router.
+## Features
+
+- Clock in / Clock out functionality
+- Shift history tracking
+- Automatic time calculations
+- Secure user authentication (Firebase Authentication)
+- Cloud-based data storage (Cloud Firestore)
+- Responsive React interface
+- Role-based access (Employee / Admin ready)
+
+---
+
+## Tech Stack
+
+### Frontend
+- React
+- React Router
+- CSS
+
+### Backend / Infrastructure
+- Firebase Authentication
+- Cloud Firestore
+- Firebase Hosting
+- Firebase Security Rules
+
+---
+
+## Project Structure (Default React App)
+
+cashiverse/
+│
+├── public/
+│   ├── favicon.ico
+│   ├── index.html
+│   ├── logo192.png
+│   ├── logo512.png
+│   ├── manifest.json
+│   └── robots.txt
+│
+├── src/
+│   ├── App.css
+│   ├── App.js
+│   ├── App.test.js
+│   ├── index.css
+│   ├── index.js
+│   ├── logo.svg
+│   ├── reportWebVitals.js
+│   └── setupTests.js
+│
+├── .gitignore
+├── package.json
+├── package-lock.json
+└── README.md
+
+---
+
+## Installation
+
+### 1. Clone the repository
+
+```bash
+git clone https://github.com/yourusername/cashiverse.git
+cd cashiverse
