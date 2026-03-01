@@ -35,32 +35,7 @@ Cashiverse is a web-based shift clock-in service designed to help employees trac
 
 ## Project Structure (Default React App)
 
-cashiverse/
-│
-├── public/
-│   ├── favicon.ico
-│   ├── index.html
-│   ├── logo192.png
-│   ├── logo512.png
-│   ├── manifest.json
-│   └── robots.txt
-│
-├── src/
-│   ├── App.css
-│   ├── App.js
-│   ├── App.test.js
-│   ├── index.css
-│   ├── index.js
-│   ├── logo.svg
-│   ├── reportWebVitals.js
-│   └── setupTests.js
-│
-├── .gitignore
-├── package.json
-├── package-lock.json
-└── README.md
-
----
+*This will be added for the final release.*
 
 ## Installation
 
