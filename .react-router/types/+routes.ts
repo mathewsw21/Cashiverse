@@ -14,20 +14,36 @@ type Pages = {
   "/": {
     params: {};
   };
+  "/timetable": {
+    params: {};
+  };
+  "/timetable_admin": {
+    params: {};
+  };
 };
 
 type RouteFiles = {
   "root.tsx": {
     id: "root";
-    page: "/";
+    page: "/" | "/timetable" | "/timetable_admin";
   };
-  "routes/home.tsx": {
+  "./routes/home.tsx": {
     id: "routes/home";
     page: "/";
+  };
+  "./routes/timetable.tsx": {
+    id: "routes/timetable";
+    page: "/timetable";
+  };
+  "./routes/timetable_admin.tsx": {
+    id: "routes/timetable_admin";
+    page: "/timetable_admin";
   };
 };
 
 type RouteModules = {
   "root": typeof import("./app/root.tsx");
-  "routes/home": typeof import("./app/routes/home.tsx");
+  "routes/home": typeof import("./app/./routes/home.tsx");
+  "routes/timetable": typeof import("./app/./routes/timetable.tsx");
+  "routes/timetable_admin": typeof import("./app/./routes/timetable_admin.tsx");
 };

@@ -1,86 +1,199 @@
+import { useEffect, useState } from "react";
+import { db, auth } from "../../src/firebase";
+import { collection, getDocs, doc, setDoc, getDoc } from "firebase/firestore";
+import {
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword
+} from "firebase/auth";
+import { useNavigate } from "react-router";
+
 export function Welcome() {
+  const [items, setItems] = useState<any[]>([]);
+  const [status, setStatus] = useState("Connecting to Firestore...");
+
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [authStatus, setAuthStatus] = useState("");
+
+  const [mode, setMode] = useState<"signin" | "signup">("signin");
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+
+  const navigate = useNavigate();
+
+  const signUp = async () => {
+    try {
+      if (!firstName || !lastName) {
+        setAuthStatus("X Please enter first and last name");
+        return;
+      }
+
+      const userCred = await createUserWithEmailAndPassword(auth, email, password);
+      const user = userCred.user;
+
+      await setDoc(doc(db, "users", user.uid), {
+        email: user.email,
+        first_name: firstName,
+        last_name: lastName,
+        createdAt: new Date(),
+        role: isAdmin ? "admin" : "employee",
+
+        ...(isAdmin && {
+          employees: []
+        })
+      });
+
+      setAuthStatus(`Account created as ${isAdmin ? "ADMIN" : "EMPLOYEE"}`);
+
+      navigate(isAdmin ? "/timetable_admin" : "/timetable");
+
+    } catch (err: any) {
+      console.error(err);
+      setAuthStatus(err.message);
+    }
+  };
+
+  const signIn = async () => {
+    try {
+      const userCred = await signInWithEmailAndPassword(auth, email, password);
+      const user = userCred.user;
+
+      const userDoc = await getDoc(doc(db, "users", user.uid));
+
+      if (!userDoc.exists()) {
+        setAuthStatus("User data not found");
+        return;
+      }
+
+      const role = userDoc.data().role;
+
+      console.log("ROLE:", role);
+
+      setAuthStatus("Signed in");
+
+      navigate(role === "admin" ? "/timetable_admin" : "/timetable");
+
+    } catch (err: any) {
+      console.error(err);
+      setAuthStatus(err.message);
+    }
+  };
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const snapshot = await getDocs(collection(db, "items"));
+        const data = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }));
+
+        setItems(data);
+        setStatus("Firestore connected");
+      } catch (err) {
+        console.error("Firestore error:", err);
+        setStatus("Firestore failed");
+      }
+    };
+
+    fetchData();
+  }, []);
+
   return (
-    <main className="flex items-center justify-center pt-20 pb-10 min-h-screen bg-white dark:bg-gray-900">
-      <div className="flex-1 flex flex-col items-center gap-16 min-h-0">
+    <main className="flex items-center justify-center min-h-screen bg-white dark:bg-gray-900">
+      <div className="w-full max-w-md p-8 bg-gray-50 dark:bg-gray-800 rounded-2xl shadow">
 
-        {/* Header */}
-        <header className="flex flex-col items-center gap-4 text-center px-4">
-          <h1 className="text-5xl font-bold text-gray-900 dark:text-white">
-            Welcome to Cashiverse
-          </h1>
-          <p className="text-lg text-gray-600 dark:text-gray-300 max-w-xl">
-            A modern shift clocking and workforce management platform built
-            with React and Firebase.
-          </p>
-        </header>
+        <h1 className="text-3xl font-bold text-center mb-6 text-gray-900 dark:text-white">
+          Cashiverse
+        </h1>
 
-        {/* Card Section */}
-        <div className="max-w-[350px] w-full space-y-6 px-4">
-          <nav className="rounded-3xl border border-gray-200 p-6 dark:border-gray-700 space-y-4 bg-gray-50 dark:bg-gray-800 shadow-sm">
-            <p className="leading-6 text-gray-700 dark:text-gray-200 text-center font-medium">
-              What&apos;s next?
-            </p>
-            <ul className="space-y-2">
-              {resources.map(({ href, text, icon }) => (
-                <li key={href}>
-                  <a
-                    className="group flex items-center gap-3 p-3 rounded-xl transition hover:bg-gray-100 dark:hover:bg-gray-700 text-blue-700 dark:text-blue-400"
-                    href={href}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    {icon}
-                    {text}
-                  </a>
-                </li>
-              ))}
-            </ul>
-          </nav>
+        <div className="flex mb-6">
+          <button
+            onClick={() => setMode("signin")}
+            className={`flex-1 p-2 rounded-l-lg ${
+              mode === "signin" ? "bg-blue-600 text-white" : "bg-gray-200"
+            }`}
+          >
+            Sign In
+          </button>
+
+          <button
+            onClick={() => setMode("signup")}
+            className={`flex-1 p-2 rounded-r-lg ${
+              mode === "signup" ? "bg-blue-600 text-white" : "bg-gray-200"
+            }`}
+          >
+            Create Account
+          </button>
         </div>
 
+        <div className="flex flex-col gap-3">
+        
+          {mode === "signup" && (
+            <>
+              <input
+                type="text"
+                placeholder="First Name"
+                value={firstName}
+                onChange={(e) => setFirstName(e.target.value)}
+                className="p-2 rounded border"
+              />
+
+              <input
+                type="text"
+                placeholder="Last Name"
+                value={lastName}
+                onChange={(e) => setLastName(e.target.value)}
+                className="p-2 rounded border"
+              />
+            </>
+          )}
+
+          <input
+            type="email"
+            placeholder="Email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="p-2 rounded border"
+          />
+
+          <input
+            type="password"
+            placeholder="Password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="p-2 rounded border"
+          />
+
+          {mode === "signup" && (
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={isAdmin}
+                onChange={(e) => setIsAdmin(e.target.checked)}
+              />
+              Create as Admin
+            </label>
+          )}
+
+          <button
+            onClick={mode === "signup" ? signUp : signIn}
+            className="bg-blue-600 text-white p-2 rounded hover:bg-blue-700"
+          >
+            {mode === "signup" ? "Create Account" : "Sign In"}
+          </button>
+
+          <p className="text-sm text-gray-500 text-center">
+            {authStatus}
+          </p>
+        </div>
+
+        <p className="text-xs text-center mt-4 text-green-500">
+          {status}
+        </p>
       </div>
     </main>
   );
 }
-
-const resources = [
-  {
-    href: "https://reactrouter.com/docs",
-    text: "React Router Docs",
-    icon: (
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        width="24"
-        height="20"
-        viewBox="0 0 20 20"
-        fill="none"
-        className="stroke-gray-600 group-hover:stroke-current dark:stroke-gray-300"
-      >
-        <path
-          d="M9.99981 10.0751V9.99992M17.4688 17.4688C15.889 19.0485 11.2645 16.9853 7.13958 12.8604C3.01467 8.73546 0.951405 4.11091 2.53116 2.53116C4.11091 0.951405 8.73546 3.01467 12.8604 7.13958C16.9853 11.2645 19.0485 15.889 17.4688 17.4688ZM2.53132 17.4688C0.951566 15.8891 3.01483 11.2645 7.13974 7.13963C11.2647 3.01471 15.8892 0.951453 17.469 2.53121C19.0487 4.11096 16.9854 8.73551 12.8605 12.8604C8.73562 16.9853 4.11107 19.0486 2.53132 17.4688Z"
-          strokeWidth="1.5"
-          strokeLinecap="round"
-        />
-      </svg>
-    ),
-  },
-  {
-    href: "https://rmx.as/discord",
-    text: "Join Discord",
-    icon: (
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        width="24"
-        height="20"
-        viewBox="0 0 24 20"
-        fill="none"
-        className="stroke-gray-600 group-hover:stroke-current dark:stroke-gray-300"
-      >
-        <path
-          d="M15.0686 1.25995L14.5477 1.17423L14.2913 1.63578C14.1754 1.84439 14.0545 2.08275 13.9422 2.31963C12.6461 2.16488 11.3406 2.16505 10.0445 2.32014C9.92822 2.08178 9.80478 1.84975 9.67412 1.62413L9.41449 1.17584L8.90333 1.25995C7.33547 1.51794 5.80717 1.99419 4.37748 2.66939L4.19 2.75793L4.07461 2.93019C1.23864 7.16437 0.46302 11.3053 0.838165 15.3924L0.868838 15.7266L1.13844 15.9264C2.81818 17.1714 4.68053 18.1233 6.68582 18.719L7.18892 18.8684L7.50166 18.4469C7.96179 17.8268 8.36504 17.1824 8.709 16.4944C10.8645 17.0471 13.128 17.0485 15.2821 16.4947C15.6261 17.1826 16.0293 17.8269 16.4892 18.4469L16.805 18.8725L17.3116 18.717C19.3056 18.105 21.1876 17.1751 22.8559 15.9238L23.1224 15.724L23.1528 15.3923C23.5873 10.6524 22.3579 6.53306 19.8947 2.90714L19.7759 2.73227L19.5833 2.64518C18.1437 1.99439 16.6386 1.51826 15.0686 1.25995Z"
-          strokeWidth="1.5"
-        />
-      </svg>
-    ),
-  },
-];
