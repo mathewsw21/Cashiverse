@@ -4,10 +4,11 @@ import {
   collection,
   getDocs,
   doc,
-  setDoc
+  setDoc,
+  getDoc,
+  deleteDoc
 } from "firebase/firestore";
-import { getAuth, signOut } from "firebase/auth";
-import { getDoc } from "firebase/firestore";
+import { getAuth, signOut, deleteUser } from "firebase/auth";
 
 function getMonthDates(offset = 0) {
   const now = new Date();
@@ -45,13 +46,15 @@ export function TimeTable() {
   const [firstName, setFirstName] = useState("");
   const [data, setData] = useState<any>({});
   const [timecard, setTimecard] = useState("current");
+  const [showInfo, setShowInfo] = useState(false);
+
+  const auth = getAuth();
+  const user = auth.currentUser;
 
   const dates = getMonthDates(timecard === "previous" ? -1 : 0);
 
   useEffect(() => {
     const fetchUser = async () => {
-      const auth = getAuth();
-      const user = auth.currentUser;
       if (!user) return;
 
       const userRef = doc(db, "users", user.uid);
@@ -63,22 +66,17 @@ export function TimeTable() {
     };
 
     fetchUser();
-  }, []);(timecard === "previous" ? -1 : 0);
+  }, []);
 
   useEffect(() => {
     const fetchData = async () => {
-      const auth = getAuth();
-      const user = auth.currentUser;
       if (!user) return;
 
       const snapshot = await getDocs(collection(db, "timecards"));
-
       const temp: any = {};
 
       snapshot.docs.forEach(docSnap => {
-        const fullId = docSnap.id; // USERID_DATE
-
-        // split USERID_DATE
+        const fullId = docSnap.id;
         const parts = fullId.split("_");
         const docUserId = parts[0];
         const docDate = parts.slice(1).join("_");
@@ -95,8 +93,6 @@ export function TimeTable() {
   }, [timecard]);
 
   const updateField = async (date: Date, field: string, value: any) => {
-    const auth = getAuth();
-    const user = auth.currentUser;
     if (!user) return;
 
     const id = getISODate(date);
@@ -111,55 +107,101 @@ export function TimeTable() {
 
     setData((prev: any) => ({ ...prev, [id]: newData }));
 
-    try {
-      await setDoc(doc(db, "timecards", docId), newData, { merge: true });
-    } catch (err) {
-      console.error(err);
-    }
+    await setDoc(doc(db, "timecards", docId), newData, { merge: true });
   };
 
+  // 🔥 APPROVE ONLY EXISTING
   const approveTimecard = async () => {
-    const auth = getAuth();
-    const user = auth.currentUser;
     if (!user) return;
 
-    const allApproved = Object.values(data).length > 0 && Object.values(data).every((d: any) => d.approved === true);
+    const entries = Object.entries(data);
+    if (entries.length === 0) return;
 
-    const snapshot = await getDocs(collection(db, "timecards"));
+    const allApproved = entries.every(
+      ([_, d]: any) => d.approved === true
+    );
+
     const updatedLocal: any = { ...data };
 
-    for (const docSnap of snapshot.docs) {
-      const fullId = docSnap.id;
+    for (const [docDate, existing] of entries as any) {
+      const fullId = `${user.uid}_${docDate}`;
 
-      const parts = fullId.split("_");
-      const docUserId = parts[0];
-      const docDate = parts.slice(1).join("_");
+      const newData = {
+        ...existing,
+        approved: !allApproved,
+        userId: user.uid,
+        date: docDate
+      };
 
-      if (docUserId === user.uid) {
-        const existing = docSnap.data();
+      await setDoc(doc(db, "timecards", fullId), newData, { merge: true });
 
-        const newData = {
-          ...existing,
-          approved: !allApproved,
-          userId: user.uid,
-          date: docDate
-        };
-
-        await setDoc(doc(db, "timecards", fullId), newData, { merge: true });
-
-        updatedLocal[docDate] = newData;
-      }
+      updatedLocal[docDate] = newData;
     }
 
     setData(updatedLocal);
   };
 
-  return (
-    <main className="min-h-screen bg-gray-100 flex flex-col items-center p-6">
+  // 🔥 DELETE ACCOUNT (FULL CLEANUP)
+  const handleDeleteAccount = async () => {
+    if (!user) return;
 
-      {/* HEADER */}
-      <div className="w-full max-w-7xl flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold">
+    const confirmDelete = window.confirm(
+      "Are you sure you want to delete your account? This cannot be undone."
+    );
+
+    if (!confirmDelete) return;
+
+    try {
+      // 🔥 REMOVE USER FROM ALL EMPLOYERS' employees arrays
+      const usersSnapshot = await getDocs(collection(db, "users"));
+
+      for (const docSnap of usersSnapshot.docs) {
+        const employerId = docSnap.id;
+        const userData = docSnap.data();
+
+        if (userData.employees && Array.isArray(userData.employees)) {
+          if (userData.employees.includes(user.uid)) {
+            const updatedEmployees = userData.employees.filter(
+              (id: string) => id !== user.uid
+            );
+
+            await setDoc(
+              doc(db, "users", employerId),
+              { employees: updatedEmployees },
+              { merge: true }
+            );
+          }
+        }
+      }
+
+      // 🔥 DELETE USER DOCUMENT
+      await deleteDoc(doc(db, "users", user.uid));
+
+      // 🔥 DELETE ALL TIMECARDS
+      const snapshot = await getDocs(collection(db, "timecards"));
+
+      for (const docSnap of snapshot.docs) {
+        const fullId = docSnap.id;
+        if (fullId.startsWith(user.uid + "_")) {
+          await deleteDoc(doc(db, "timecards", fullId));
+        }
+      }
+
+      // 🔥 DELETE AUTH ACCOUNT
+      await deleteUser(user);
+
+      // 🔥 REDIRECT
+      window.location.href = "/";
+    } catch (err: any) {
+      alert(err.message);
+    }
+  };
+
+  return (
+    <main className="min-h-screen bg-gray-100 flex flex-col items-center p-4">
+
+      <div className="w-full max-w-5xl flex justify-between items-center mb-4">
+        <h1 className="text-lg font-semibold whitespace-nowrap">
           {(() => {
             const hour = new Date().getHours();
             let greeting = "Good morning";
@@ -170,42 +212,51 @@ export function TimeTable() {
           })()}
         </h1>
 
-        <div className="flex gap-4">
+        <div className="flex gap-2 items-center text-sm">
+          <span className="text-xs text-gray-600 max-w-[150px] truncate">
+            {user?.email}
+          </span>
+
           <select
             value={timecard}
             onChange={(e) => setTimecard(e.target.value)}
-            className="border px-4 py-2"
+            className="border px-2 py-1 text-sm"
           >
-            <option value="previous">Previous Timecard</option>
-            <option value="current">Current Timecard</option>
+            <option value="previous">Previous</option>
+            <option value="current">Current</option>
           </select>
 
           <button
             onClick={approveTimecard}
-            className="bg-green-600 text-white px-4 py-2 rounded"
+            className="bg-green-600 text-white px-2 py-1 text-sm rounded"
           >
-            {Object.values(data).length > 0 && Object.values(data).every((d: any) => d.approved === true)
-              ? "Remove Approval"
-              : "Approve Timecard"}
+            {Object.values(data).length > 0 &&
+            Object.values(data).every((d: any) => d.approved === true)
+              ? "Unapprove"
+              : "Approve"}
+          </button>
+
+          <button
+            onClick={() => setShowInfo(true)}
+            className="bg-blue-600 text-white px-2 py-1 text-sm rounded"
+          >
+            Info
           </button>
 
           <button
             onClick={async () => {
-              const auth = getAuth();
               await signOut(auth);
               window.location.href = "/";
             }}
-            className="bg-red-600 text-white px-4 py-2 rounded"
+            className="bg-red-600 text-white px-2 py-1 text-sm rounded"
           >
-            Sign Out
+            Logout
           </button>
         </div>
       </div>
 
-      {/* TABLE */}
-      <div className="w-full overflow-x-auto border bg-white">
+      <div className="w-full max-w-5xl overflow-x-auto border bg-white">
         <table className="min-w-full text-xs border-collapse">
-
           <thead>
             <tr className="bg-gray-300">
               <th className="border px-2 py-2">Date</th>
@@ -223,14 +274,13 @@ export function TimeTable() {
               const row = data[id] || {};
               const todayRow = isToday(date);
 
-              // Determine button label
               let buttonLabel = "Clock In";
               if (row.clockIn && !row.clockOut) buttonLabel = "Clock Out";
               if (row.clockIn && row.clockOut) buttonLabel = "Done";
 
               const handleClock = async () => {
                 const now = new Date();
-                const time = now.toTimeString().slice(0,5);
+                const time = now.toTimeString().slice(0, 5);
 
                 if (!row.clockIn) {
                   await updateField(date, "clockIn", time);
@@ -240,21 +290,13 @@ export function TimeTable() {
               };
 
               return (
-                <tr
-                  key={idx}
-                  className={`hover:bg-blue-50 ${
-                    timecard === "current" && isToday(date)
-                      ? "bg-yellow-200"
-                      : ""
-                  }`}
-                >
+                <tr key={idx} className={`hover:bg-blue-50 ${
+                  timecard === "current" && isToday(date) ? "bg-yellow-200" : ""
+                }`}>
                   <td className="border px-2 py-2 bg-gray-100">
                     {formatDate(date)}
                   </td>
 
-                  
-
-                  {/* CLOCK IN */}
                   <td className="border px-2 py-2">
                     {todayRow && (
                       <button
@@ -265,49 +307,31 @@ export function TimeTable() {
                         {buttonLabel}
                       </button>
                     )}
-                    <input
-                      type="time"
-                      value={row.clockIn || ""}
-                      onChange={(e) =>
-                        updateField(date, "clockIn", e.target.value)
-                      }
-                    />
+                    <div>{row.clockIn || "--:--"}</div>
                   </td>
 
-                  {/* CLOCK OUT */}
                   <td className="border px-2 py-2">
-                    <input
-                      type="time"
-                      value={row.clockOut || ""}
-                      onChange={(e) =>
-                        updateField(date, "clockOut", e.target.value)
-                      }
-                    />
+                    <div>{row.clockOut || "--:--"}</div>
                   </td>
 
-                  {/* TOTAL */}
                   <td className="border px-2 py-2">
                     {row.clockIn && row.clockOut
                       ? (
-                          (new Date(`1970-01-01T${row.clockOut}` as any).getTime() -
-                            new Date(`1970-01-01T${row.clockIn}` as any).getTime()) /
+                          (new Date(`1970-01-01T${row.clockOut}`).getTime() -
+                            new Date(`1970-01-01T${row.clockIn}`).getTime()) /
                           3600000
                         ).toFixed(2)
                       : "0"}
                   </td>
 
-                  {/* APPROVED */}
                   <td className="border px-2 py-2 text-center">
                     <input
                       type="checkbox"
                       checked={row.approved || false}
-                      onChange={(e) =>
-                        updateField(date, "approved", e.target.checked)
-                      }
+                      disabled
                     />
                   </td>
 
-                  {/* NOTES */}
                   <td className="border px-2 py-2">
                     <input
                       type="text"
@@ -326,7 +350,36 @@ export function TimeTable() {
         </table>
       </div>
 
+      {showInfo && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+          <div className="bg-white p-6 rounded shadow-lg w-80">
+            <h2 className="text-lg font-bold mb-4">User Info</h2>
+
+            <p className="mb-2 text-sm">
+              <strong>Email:</strong> {user?.email}
+            </p>
+
+            <p className="mb-4 text-xs break-all">
+              <strong>User ID:</strong> {user?.uid}
+            </p>
+
+            <button
+              onClick={handleDeleteAccount}
+              className="bg-red-700 text-white px-2 py-1 text-sm rounded w-full mb-2"
+            >
+              Delete Account
+            </button>
+
+            <button
+              onClick={() => setShowInfo(false)}
+              className="bg-gray-600 text-white px-2 py-1 text-sm rounded w-full"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
+
     </main>
   );
 }
-
