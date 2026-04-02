@@ -69,8 +69,6 @@ export function Welcome() {
 
       const role = userDoc.data().role;
 
-      console.log("ROLE:", role);
-
       setAuthStatus("Signed in");
 
       navigate(role === "admin" ? "/timetable_admin" : "/timetable");
@@ -102,11 +100,17 @@ export function Welcome() {
   }, []);
 
   return (
-    <main className="flex items-center justify-center min-h-screen bg-white dark:bg-gray-900">
-      <div className="w-full max-w-md p-8 bg-gray-50 dark:bg-gray-800 rounded-2xl shadow">
+    <main className="flex flex-col items-center justify-center min-h-screen bg-white dark:bg-gray-900">
+      <img
+        src="/logo.jpeg"
+        alt="Cashiverse Logo"
+        className="mb-6 w-120 h-auto"
+      />
 
-        <h1 className="text-3xl font-bold text-center mb-6 text-gray-900 dark:text-white">
-          Cashiverse
+      <div className="w-full max-w-md p-8 bg-gray-50 dark:bg-gray-800 rounded-2xl shadow text-center">
+
+        <h1 className="text-3xl font-bold mb-6 text-gray-900 dark:text-white">
+          Welcome to Cashiverse
         </h1>
 
         <div className="flex mb-6">

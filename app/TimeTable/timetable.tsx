@@ -8,7 +8,7 @@ import {
   getDoc,
   deleteDoc
 } from "firebase/firestore";
-import { getAuth, signOut, deleteUser } from "firebase/auth";
+import { getAuth, signOut, deleteUser, onAuthStateChanged } from "firebase/auth";
 
 function getMonthDates(offset = 0) {
   const now = new Date();
@@ -47,61 +47,64 @@ export function TimeTable() {
   const [data, setData] = useState<any>({});
   const [timecard, setTimecard] = useState("current");
   const [showInfo, setShowInfo] = useState(false);
+  const [currentUser, setCurrentUser] = useState<any>(null);
 
   const auth = getAuth();
   const user = auth.currentUser;
 
   const dates = getMonthDates(timecard === "previous" ? -1 : 0);
+  
+	useEffect(() => {
+	  const unsubscribe = onAuthStateChanged(auth, async (user) => {
+	  if (!user) return;
 
-  useEffect(() => {
-    const fetchUser = async () => {
-      if (!user) return;
+	  setCurrentUser(user);
 
-      const userRef = doc(db, "users", user.uid);
-      const snap = await getDoc(userRef);
+	    const userRef = doc(db, "users", user.uid);
+	    const snap = await getDoc(userRef);
 
-      if (snap.exists()) {
-        setFirstName(snap.data().first_name || "");
+	    if (snap.exists()) {
+	      setFirstName(snap.data().first_name || "");
+	    }
+	  });
+
+	  return () => unsubscribe();
+	}, []);
+
+useEffect(() => {
+  const fetchData = async () => {
+    if (!currentUser) return;
+
+    const snapshot = await getDocs(collection(db, "timecards"));
+    const temp: any = {};
+
+    snapshot.docs.forEach(docSnap => {
+      const fullId = docSnap.id;
+      const parts = fullId.split("_");
+      const docUserId = parts[0];
+      const docDate = parts.slice(1).join("_");
+
+      if (docUserId === currentUser.uid) {
+        temp[docDate] = docSnap.data();
       }
-    };
+    });
 
-    fetchUser();
-  }, []);
+    setData(temp);
+  };
 
-  useEffect(() => {
-    const fetchData = async () => {
-      if (!user) return;
-
-      const snapshot = await getDocs(collection(db, "timecards"));
-      const temp: any = {};
-
-      snapshot.docs.forEach(docSnap => {
-        const fullId = docSnap.id;
-        const parts = fullId.split("_");
-        const docUserId = parts[0];
-        const docDate = parts.slice(1).join("_");
-
-        if (docUserId === user.uid) {
-          temp[docDate] = docSnap.data();
-        }
-      });
-
-      setData(temp);
-    };
-
-    fetchData();
-  }, [timecard]);
+  fetchData();
+}, [timecard, currentUser]);
 
   const updateField = async (date: Date, field: string, value: any) => {
-    if (!user) return;
+    if (!currentUser) return;
 
     const id = getISODate(date);
-    const docId = `${user.uid}_${id}`;
+    const docId = `${currentUser.uid}_${id}`;
 
     const newData = {
       ...(data[id] || {}),
       [field]: value,
-      userId: user.uid,
+      currentUser: currentUser.uid,
       date: id
     };
 
@@ -110,40 +113,44 @@ export function TimeTable() {
     await setDoc(doc(db, "timecards", docId), newData, { merge: true });
   };
 
-  // 🔥 APPROVE ONLY EXISTING
+
   const approveTimecard = async () => {
-    if (!user) return;
+	  if (!currentUser) return;
 
-    const entries = Object.entries(data);
-    if (entries.length === 0) return;
+	  const validDates = new Set(dates.map(d => getISODate(d)));
+	  
+	  const entries = Object.entries(data).filter(([docDate]) =>
+	    validDates.has(docDate)
+	  );
 
-    const allApproved = entries.every(
-      ([_, d]: any) => d.approved === true
-    );
+	  if (entries.length === 0) return;
 
-    const updatedLocal: any = { ...data };
+	  const allApproved = entries.every(
+	    ([_, d]: any) => d.approved === true
+	  );
 
-    for (const [docDate, existing] of entries as any) {
-      const fullId = `${user.uid}_${docDate}`;
+	  const updatedLocal: any = { ...data };
 
-      const newData = {
-        ...existing,
-        approved: !allApproved,
-        userId: user.uid,
-        date: docDate
-      };
+	  for (const [docDate, existing] of entries as any) {
+	    const fullId = `${currentUser.uid}_${docDate}`;
 
-      await setDoc(doc(db, "timecards", fullId), newData, { merge: true });
+	    const newData = {
+	      ...existing,
+	      approved: !allApproved,
+	      userId: currentUser.uid,
+	      date: docDate
+	    };
 
-      updatedLocal[docDate] = newData;
-    }
+	    await setDoc(doc(db, "timecards", fullId), newData, { merge: true });
 
-    setData(updatedLocal);
-  };
+	    updatedLocal[docDate] = newData;
+	  }
 
-  // 🔥 DELETE ACCOUNT (FULL CLEANUP)
+	  setData(updatedLocal);
+	};
+
   const handleDeleteAccount = async () => {
-    if (!user) return;
+    if (!currentUser) return;
 
     const confirmDelete = window.confirm(
       "Are you sure you want to delete your account? This cannot be undone."
@@ -152,7 +159,6 @@ export function TimeTable() {
     if (!confirmDelete) return;
 
     try {
-      // 🔥 REMOVE USER FROM ALL EMPLOYERS' employees arrays
       const usersSnapshot = await getDocs(collection(db, "users"));
 
       for (const docSnap of usersSnapshot.docs) {
@@ -160,7 +166,7 @@ export function TimeTable() {
         const userData = docSnap.data();
 
         if (userData.employees && Array.isArray(userData.employees)) {
-          if (userData.employees.includes(user.uid)) {
+          if (userData.employees.includes(currentUser.uid)) {
             const updatedEmployees = userData.employees.filter(
               (id: string) => id !== user.uid
             );
@@ -173,24 +179,19 @@ export function TimeTable() {
           }
         }
       }
+      await deleteDoc(doc(db, "users", currentUser.uid));
 
-      // 🔥 DELETE USER DOCUMENT
-      await deleteDoc(doc(db, "users", user.uid));
-
-      // 🔥 DELETE ALL TIMECARDS
       const snapshot = await getDocs(collection(db, "timecards"));
 
       for (const docSnap of snapshot.docs) {
         const fullId = docSnap.id;
-        if (fullId.startsWith(user.uid + "_")) {
+        if (fullId.startsWith(currentUser.uid + "_")) {
           await deleteDoc(doc(db, "timecards", fullId));
         }
       }
+      
+      await deleteUser(currentUser);
 
-      // 🔥 DELETE AUTH ACCOUNT
-      await deleteUser(user);
-
-      // 🔥 REDIRECT
       window.location.href = "/";
     } catch (err: any) {
       alert(err.message);
@@ -214,7 +215,7 @@ export function TimeTable() {
 
         <div className="flex gap-2 items-center text-sm">
           <span className="text-xs text-gray-600 max-w-[150px] truncate">
-            {user?.email}
+            {currentUser?.email}
           </span>
 
           <select
@@ -230,10 +231,21 @@ export function TimeTable() {
             onClick={approveTimecard}
             className="bg-green-600 text-white px-2 py-1 text-sm rounded"
           >
-            {Object.values(data).length > 0 &&
-            Object.values(data).every((d: any) => d.approved === true)
-              ? "Unapprove"
-              : "Approve"}
+            {(() => {
+		  const validDates = new Set(dates.map(d => getISODate(d)));
+
+		  const entries = Object.entries(data).filter(([docDate]) =>
+		    validDates.has(docDate)
+		  );
+
+		  if (entries.length === 0) return "Approve Month";
+
+		  const allApproved = entries.every(
+		    ([_, d]: any) => d.approved === true
+		  );
+
+		  return allApproved ? "Remove Approval" : "Approve Month";
+		})()}
           </button>
 
           <button
@@ -356,11 +368,11 @@ export function TimeTable() {
             <h2 className="text-lg font-bold mb-4">User Info</h2>
 
             <p className="mb-2 text-sm">
-              <strong>Email:</strong> {user?.email}
+              <strong>Email:</strong> {currentUser?.email}
             </p>
 
             <p className="mb-4 text-xs break-all">
-              <strong>User ID:</strong> {user?.uid}
+              <strong>User ID:</strong> {currentUser?.uid}
             </p>
 
             <button

@@ -11,7 +11,7 @@ import {
   arrayRemove,
   deleteDoc
 } from "firebase/firestore";
-import { getAuth, signOut } from "firebase/auth";
+import { getAuth, signOut, onAuthStateChanged } from "firebase/auth";
 
 function getMonthDates(offset = 0) {
   const now = new Date();
@@ -33,7 +33,20 @@ function formatDate(date: Date) {
 }
 
 function getISODate(date: Date) {
-  return date.toISOString().split("T")[0];
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
+
+function parseLocalDate(dateStr: string) {
+  const [year, month, day] = dateStr.split("-");
+  return new Date(
+    Number(year),
+    Number(month) - 1,
+    Number(day)
+  );
 }
 
 export function TimeTable_ADMIN() {
@@ -49,40 +62,60 @@ export function TimeTable_ADMIN() {
   const [showInfo, setShowInfo] = useState(false);
   const [currentUser, setCurrentUser] = useState<any>(null);
 
-  const dates = getMonthDates();
+  const [availableMonths, setAvailableMonths] = useState<string[]>([]);
+  const [selectedMonth, setSelectedMonth] = useState("");
+  
+  const getDatesForSelectedMonth = () => {
+  if (!selectedMonth) return [];
+
+  const [monthName, year] = selectedMonth.split(" ");
+  const monthIndex = new Date(`${monthName} 1, ${year}`).getMonth();
+
+  const daysInMonth = new Date(parseInt(year), monthIndex + 1, 0).getDate();
+
+  const dates: Date[] = [];
+
+  for (let d = 1; d <= daysInMonth; d++) {
+    dates.push(new Date(parseInt(year), monthIndex, d));
+  }
+
+    return dates;
+  };
+
+  const dates = getDatesForSelectedMonth();
 
   useEffect(() => {
-    const fetchAdminData = async () => {
-      const auth = getAuth();
-      const admin = auth.currentUser;
-      if (!admin) return;
+	  const auth = getAuth();
 
-      const snap = await getDoc(doc(db, "users", admin.uid));
-      if (!snap.exists()) return;
+	  const unsubscribe = onAuthStateChanged(auth, async (admin) => {
+	    if (!admin) return;
 
-      const adminData = snap.data();
-      setFirstName(adminData.first_name || "");
+	    const snap = await getDoc(doc(db, "users", admin.uid));
+	    if (!snap.exists()) return;
 
-      const ids = adminData.employees || [];
-      const temp: any[] = [];
+	    const adminData = snap.data();
+	    setFirstName(adminData.first_name || "");
 
-      for (const uid of ids) {
-        const s = await getDoc(doc(db, "users", uid));
-        if (s.exists()) temp.push({ id: uid, ...s.data() });
-      }
+	    const ids = adminData.employees || [];
+	    const temp: any[] = [];
 
-      setEmployees(temp);
-      setSelectedEmployee(temp[0]?.id || "");
+	    for (const uid of ids) {
+	      const s = await getDoc(doc(db, "users", uid));
+	      if (s.exists()) temp.push({ id: uid, ...s.data() });
+	    }
 
-      setCurrentUser({
-        id: admin.uid,
-        email: admin.email,
-        ...adminData
-      });
-    };
+	    setEmployees(temp);
+	    setSelectedEmployee(temp[0]?.id || "");
 
-    fetchAdminData();
-  }, []);
+	    setCurrentUser({
+	      id: admin.uid,
+	      email: admin.email,
+	      ...adminData
+	    });
+	  });
+
+	  return () => unsubscribe();
+	}, []);
 
   const addEmployee = async () => {
 	  const admin = getAuth().currentUser;
@@ -114,10 +147,10 @@ export function TimeTable_ADMIN() {
 
 	    const newEmployee = { id: trimmedId, ...user };
 
-	    // 🔥 UPDATE LIST
+	    // UPDATE LIST
 	    setEmployees((prev) => [...prev, newEmployee]);
 
-	    // 🔥 FORCE SELECT NEW EMPLOYEE (THIS FIXES YOUR BUG)
+	    // FORCE SELECT NEW EMPLOYEE (THIS FIXES YOUR BUG)
 	    setSelectedEmployee(trimmedId);
 
 	    setEmployeeId("");
@@ -169,7 +202,7 @@ export function TimeTable_ADMIN() {
 
   useEffect(() => {
 	  const fetch = async () => {
-	    // 🔥 IF NO EMPLOYEE → CLEAR TABLE
+	    // IF NO EMPLOYEE → CLEAR TABLE
 	    if (!selectedEmployee) {
 	      setData({});
 	      return;
@@ -177,19 +210,39 @@ export function TimeTable_ADMIN() {
 
 	    const snapshot = await getDocs(collection(db, "timecards"));
 	    const temp: any = {};
-
+	    
+	    const monthsSet = new Set<string>();
+	    
 	    snapshot.docs.forEach((d) => {
-	      const [uid, ...rest] = d.id.split("_");
-	      if (uid === selectedEmployee) {
-		temp[rest.join("_")] = d.data();
-	      }
-	    });
+		  const [uid, ...rest] = d.id.split("_");
+		  const dateStr = rest.join("_");
+
+		  if (uid === selectedEmployee) {
+		    temp[dateStr] = d.data();
+
+		    const date = parseLocalDate(dateStr);
+		    const monthYear = date.toLocaleString("default", {
+		      month: "long",
+		      year: "numeric"
+		    });
+
+		    monthsSet.add(monthYear);
+		  }
+		});
 
 	    setData(temp);
+	    
+	    const monthsArray = Array.from(monthsSet).reverse();
+	    setAvailableMonths(monthsArray);
+  	    if (!selectedMonth) {
+		  setSelectedMonth(monthsArray[0] || "");
+		}
 	  };
 
 	  fetch();
 	}, [selectedEmployee]);
+
+
 
   const updateAdminField = async (date: Date, field: string, value: any) => {
     if (!selectedEmployee) return;
@@ -263,9 +316,10 @@ export function TimeTable_ADMIN() {
         </button>
 
         <select
-          value={selectedEmployee}
-          onChange={(e) => setSelectedEmployee(e.target.value)}
-        >
+	  value={selectedEmployee}
+	  onChange={(e) => setSelectedEmployee(e.target.value)}
+	  className="bg-gray-200 border border-gray-400 px-3 py-2 rounded text-black"
+	>
           {employees.map((e) => (
             <option key={e.id} value={e.id}>
               {e.first_name}
@@ -277,6 +331,18 @@ export function TimeTable_ADMIN() {
           Remove
         </button>
       </div>
+
+	<select
+	  value={selectedMonth}
+	  onChange={(e) => setSelectedMonth(e.target.value)}
+	  className="bg-gray-200 border border-gray-400 px-3 py-2 rounded text-black"
+	>
+	  {availableMonths.map((m) => (
+	    <option key={m} value={m}>
+	      {m}
+	    </option>
+	  ))}
+	</select>
 
       {/* TABLE */}
       <div className="w-full max-w-7xl overflow-x-auto border bg-white">
@@ -294,7 +360,15 @@ export function TimeTable_ADMIN() {
           <tbody>
             {dates.map((date, i) => {
               const id = getISODate(date);
-              const row = data[id] || {};
+              const rowDate = new parseLocalDate(id);
+	      const rowMonth = rowDate.toLocaleString("default", {
+		  month: "long",
+		  year: "numeric"
+		});
+
+	      if (rowMonth !== selectedMonth) return null;
+
+	      const row = data[id] || {};
 
               return (
                 <tr key={i} className="hover:bg-blue-50">
