@@ -110,7 +110,7 @@ export function Welcome() {
       <div className="w-full max-w-md p-8 bg-gray-50 dark:bg-gray-800 rounded-2xl shadow text-center">
 
         <h1 className="text-3xl font-bold mb-6 text-gray-900 dark:text-white">
-          Welcome to Kronos 2
+          Welcome to Cashiverse
         </h1>
 
         <div className="flex mb-6">
