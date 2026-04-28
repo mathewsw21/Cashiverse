@@ -48,6 +48,13 @@ All interactions follow a request-response model where frontend actions update t
 - docker pull rjhwinner2003/cashiverse:latest
 - docker run -p 3000:3000 rjhwinner2003/cashiverse:latest
 
+## Deploying with Docker
+- docker pull rjhwinner2003/cashiverse:latest
+- docker tag rjhwinner2003/cashiverse:latest gcr.io/<YOUR PROJECT ID>/cashiverse:latest
+- docker push gcr.io/<YOUR PROJECT ID>/cashiverse:latest
+- gcloud run deploy cahsiverse --image gcr.io/<YOUR PROJECT ID>/cashiverse:latest
+- Select a region close to you and then allow unauthenticated invocations
+
 ---
 
 ## Running Locally (Development)
