@@ -7,9 +7,15 @@ import {
 } from "firebase/auth";
 import { useNavigate } from "react-router";
 
+export const meta = () => {
+  return [
+    { title: "Cashiverse" },
+  ];
+};
+
 export function Welcome() {
   const [items, setItems] = useState<any[]>([]);
-  const [status, setStatus] = useState("Connecting to Firestore...");
+  const [status, setStatus] = useState("Connecting to Server...");
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -50,9 +56,22 @@ export function Welcome() {
       navigate(isAdmin ? "/timetable_admin" : "/timetable");
 
     } catch (err: any) {
-      console.error(err);
-      setAuthStatus(err.message);
-    }
+	  console.error("SIGNUP ERROR:", err);
+
+	  const code = err?.code || "";
+
+	  let message = "Signup failed";
+
+	  if (code.includes("email-already-in-use")) {
+	    message = "Email already in use";
+	  } else if (code.includes("invalid-email")) {
+	    message = "Invalid email";
+	  } else if (code.includes("weak-password")) {
+	    message = "Password too weak";
+	  }
+
+	  setAuthStatus(message);
+	}
   };
 
   const signIn = async () => {
@@ -77,7 +96,7 @@ export function Welcome() {
 
     } catch (err: any) {
       console.error(err);
-      setAuthStatus(err.message);
+      setAuthStatus("Invalid email or password");
     }
   };
 
@@ -103,6 +122,12 @@ export function Welcome() {
 
   return (
     <main className="flex items-center justify-center min-h-screen bg-white dark:bg-gray-900">
+      <img
+        src="/logo.jpeg"
+        alt="Cashiverse Logo"
+        className="mb-6 w-120 h-auto"
+      />
+    
       <div className="w-full max-w-md p-8 bg-gray-50 dark:bg-gray-800 rounded-2xl shadow">
 
         <h1 className="text-3xl font-bold text-center mb-6 text-gray-900 dark:text-white">

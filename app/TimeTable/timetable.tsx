@@ -4,9 +4,10 @@ import {
   collection,
   getDocs,
   doc,
-  setDoc
+  setDoc,
+  deleteDoc
 } from "firebase/firestore";
-import { getAuth, signOut } from "firebase/auth";
+import { getAuth, signOut, deleteUser } from "firebase/auth";
 import { getDoc } from "firebase/firestore";
 
 function getMonthDates(offset = 0) {
@@ -45,6 +46,8 @@ export function TimeTable() {
   const [firstName, setFirstName] = useState("");
   const [data, setData] = useState<any>({});
   const [timecard, setTimecard] = useState("current");
+  const [showInfo, setShowInfo] = useState(false);
+  const [currentUser, setCurrentUser] = useState<any>(null);
 
   const dates = getMonthDates(timecard === "previous" ? -1 : 0);
 
@@ -53,6 +56,8 @@ export function TimeTable() {
       const auth = getAuth();
       const user = auth.currentUser;
       if (!user) return;
+
+      setCurrentUser(user);
 
       const userRef = doc(db, "users", user.uid);
       const snap = await getDoc(userRef);
@@ -63,7 +68,7 @@ export function TimeTable() {
     };
 
     fetchUser();
-  }, []);(timecard === "previous" ? -1 : 0);
+  }, []);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -153,6 +158,51 @@ export function TimeTable() {
 
     setData(updatedLocal);
   };
+ 
+const handleDeleteAccount = async () => {
+  const auth = getAuth();
+  const user = auth.currentUser;
+
+  console.log("DELETE CLICKED", user);
+
+  if (!user) {
+    alert("User not loaded");
+    return;
+  }
+
+  try {
+    console.log("STEP A");
+
+    await deleteDoc(doc(db, "users", user.uid));
+
+    console.log("STEP B");
+
+    const snapshot = await getDocs(collection(db, "timecards"));
+
+    for (const docSnap of snapshot.docs) {
+      if (docSnap.id.startsWith(user.uid + "_")) {
+        await deleteDoc(doc(db, "timecards", docSnap.id));
+      }
+    }
+
+    console.log("STEP C");
+
+    try {
+      await deleteUser(user);
+    } catch (err: any) {
+      console.log("DELETE AUTH FAILED:", err.code);
+    }
+
+    console.log("STEP D");
+
+    await signOut(auth);
+
+    window.location.href = "/";
+  } catch (err: any) {
+    console.error(err);
+    alert(err.message);
+  }
+};
 
   return (
     <main className="min-h-screen bg-gray-100 flex flex-col items-center p-6">
@@ -199,6 +249,14 @@ export function TimeTable() {
           >
             Sign Out
           </button>
+          
+          <button
+            onClick={() => setShowInfo(true)}
+            className="bg-blue-600 text-white px-2 py-1 text-sm rounded"
+          >
+            Info
+          </button>
+          
         </div>
       </div>
 
@@ -325,6 +383,36 @@ export function TimeTable() {
           </tbody>
         </table>
       </div>
+
+	{showInfo && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+          <div className="bg-white p-6 rounded shadow-lg w-80">
+            <h2 className="text-lg font-bold mb-4">User Info</h2>
+
+            <p className="mb-2 text-sm">
+              <strong>Email:</strong> {currentUser?.email}
+            </p>
+
+            <p className="mb-4 text-xs break-all">
+              <strong>User ID:</strong> {currentUser?.uid}
+            </p>
+
+            <button
+              onClick={handleDeleteAccount}
+              className="bg-red-700 text-white px-2 py-1 text-sm rounded w-full mb-2"
+            >
+              Delete Account
+            </button>
+
+            <button
+              onClick={() => setShowInfo(false)}
+              className="bg-gray-600 text-white px-2 py-1 text-sm rounded w-full"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
 
     </main>
   );
