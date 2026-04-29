@@ -13,7 +13,6 @@ export const meta = () => {
   ];
 };
 
-//this is the welcome component
 export function Welcome() {
   const [items, setItems] = useState<any[]>([]);
   const [status, setStatus] = useState("Connecting to Server...");
